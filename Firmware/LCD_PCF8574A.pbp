@@ -1,0 +1,151 @@
+; File Name   : LCD_PCF8574A.pbp
+; Author      : Darrel Taylor
+; Created     : Mon Feb 24 2014
+;               Sun Mar 03 2014
+;               Updated bit shift. Data is on Lower side, Cmd lines on Upper               
+; Compiler    : PicBasic Pro 3.0.6.x or higher
+; Description : Uses PCF8574 Port expander to interface with HD44780 LCD
+;
+;-------------------------------------------------------------------------------
+LCD_BuffSize    CON 30
+LCD_Buff        VAR BYTE[LCD_BuffSize]
+LCD_BuffAddr    CON EXT : @LCD_BuffAddr = _LCD_Buff
+LCD_BuffLen     VAR WORD        ; Length of data in buffer
+LCD_Data        VAR BYTE        ; Data to Send to LCD
+LCD_Byte        VAR BYTE        ; Nibbles to Send
+LCD_RS          VAR LCD_Byte.0  ; Register Select bit
+LCD_RW          VAR LCD_Byte.1  ; Read/Write bit
+LCD_E           VAR LCD_Byte.2  ; Enable bit
+LCD_BackLight   VAR LCD_Byte.3  ; Backlight 0=ON
+LCD_WriteMode   VAR BYTE        ; 1=LowNibble, 2=HighNibble, 3=Both
+LCD_CommandMode VAR BIT         ; Indicates next byte is a command
+LCD_Byte2       VAR BYTE        ; Same nibble without E bit
+LCD_Idx         VAR BYTE
+testmode        var byte
+
+GOTO Over_LCDPCF8574 
+
+;----[Write 1-byte to LCD]--(Input is LCD_Data)---------------------------------
+USERCOMMAND "LCD_WRITE"
+LCD_WRITE_:
+   LCD_E = 1
+   IF LCD_WriteMode.1 = 1 THEN                             ; Write High Nibble
+     LCD_Byte = (LCD_Byte & $0F) | (LCD_Data  & $F0)
+     LCD_Byte2 = LCD_Byte & $FB    
+     I2CWRITE SDA,SCL, LCD_Addr,[LCD_Byte, LCD_Byte2]
+   ENDIF
+  
+   IF LCD_WriteMode.0 = 1 THEN                             ; Write Low Nibble
+     LCD_Byte = (LCD_Byte & $0F) | ((LCD_Data << 4 )& $F0)
+     LCD_Byte2 = LCD_Byte & $FB
+     I2CWRITE SDA,SCL, LCD_Addr,[LCD_Byte, LCD_Byte2]
+   ENDIF
+return
+
+ASM
+LCD_WRITE?  macro
+    L?CALL _LCD_WRITE_
+  endm
+ENDASM
+
+;----[Write contents of buffer to LCD]------------------------------------------
+USERCOMMAND "LCD_WRITEBUFF"
+LCD_WRITEBUFF_:
+' The purpose of this routine is to increment through LCD_Buff and
+' pass each character to LCD_Data so that it can be written.
+' This will loop for LCD_BuffLen which is calculated by 
+'    subtracting the starting address of the buffer from the
+'    ending address of the buffer.
+
+    LCD_BuffLen = R5 - LCD_BuffAddr -1
+    LCD_WriteMode = 3          ; Both Nibbles
+    LCD_CommandMode = 0
+    FOR LCD_Idx = 0 TO LCD_BuffLen
+        IF LCD_Buff(LCD_Idx) = $FE THEN LCD_CommandMode = 1 : GOTO LCD_ByteDone
+        IF LCD_CommandMode THEN
+            LCD_RS = 0   ' this is a command
+            LCD_CommandMode = 0 ' false, next byte will be data
+        ELSE
+            LCD_RS = 1   ' this is data
+        ENDIF
+        LCD_Data = LCD_Buff(LCD_Idx)
+        LCD_Write
+        IF LCD_CommandMode THEN
+            PAUSE 2
+        ELSE
+            PAUSEUS 50
+        ENDIF
+
+      LCD_ByteDone:
+    NEXT LCD_Idx
+
+    LCD_CommandMode = 0
+RETURN
+
+ASM
+LCD_WRITEBUFF?  macro
+    L?CALL _LCD_WRITEBUFF_
+  endm
+ENDASM
+
+USERCOMMAND "LED_WRITE"
+LED_Write_:    
+    ; Write to the LEDs (this is a test routine)
+    LCD_E = 1
+    IF LCD_WriteMode.0 = 1 THEN                                  ; Write Low Nibble
+       LCD_Byte = (LCD_Byte & $0F) | (LCD_Data  & $F0)
+       LCD_Byte2 = LCD_Byte & $FB
+       i2cwrite SDA,SCL, LCD_Addr2,[LCD_Byte]
+       pause 500
+       i2cwrite SDA,SCL, LCD_Addr2,[LCD_Byte2]
+       pause 500
+    endif
+    IF LCD_WriteMode.0 = 1 THEN                                  ; Write Low Nibble
+       LCD_Byte = (LCD_Byte & $0F) | ((LCD_Data << 4 )& $F0)
+       LCD_Byte2 = LCD_Byte & $FB
+       i2cwrite SDA,SCL, LCD_Addr2,[LCD_Byte]
+       pause 500
+       i2cwrite SDA,SCL, LCD_Addr2,[LCD_Byte2]
+       pause 500
+    endif   
+RETURN
+
+ASM
+LED_WRITE?  macro
+    L?CALL _LED_WRITE_
+  endm
+ENDASM
+
+Over_LCDPCF8574:
+
+;----[Initialize the LCD]-------------------------------------------------------
+PAUSE 250             ; LCD Power-on delay
+LCD_Backlight = 1     ; Backlight OFF
+LCD_RW = 0            ; Write to LCD
+LCD_RS = 0            ; Command Register
+
+LCD_WriteMode = 1     ;-- Low Nibbles only
+LCD_Data = 3          ; Reset 3 times
+gosub LCD_Write_
+PAUSEUS 6000
+gosub LCD_Write_
+PAUSEUS 1000
+gosub LCD_Write_
+PAUSEUS 1000
+
+LCD_Data = 2          ; Start 4-bit mode
+gosub LCD_Write_
+PAUSEUS 1000
+
+LCD_WriteMode = 3     ;-- Both Nibbles
+LCD_Data = $28
+gosub LCD_Write_      ; Function Set, 4-bit, 2-line, 5x7
+LCD_Data = $0C
+gosub LCD_Write_      ; Display ON
+LCD_Data = $01
+gosub LCD_Write_      ; Clear Screen
+PAUSE 2
+LCD_Data = $06 
+gosub LCD_Write_      ; Entry Mode
+                       
+PAUSE 2               ; Let command finish

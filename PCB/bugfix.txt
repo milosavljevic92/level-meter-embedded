@@ -1,0 +1,3 @@
+plocica za sonde, podnozija za izlazne mosfete
+porta.6
+izlazni portovi na usb portu

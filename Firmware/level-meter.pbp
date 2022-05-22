@@ -1,0 +1,563 @@
+'*********************************************************************
+' Name        : Nivomat.pbp
+' Compiler    : PICBASIC PRO Compiler 3.0
+' Assembler   : PM or MPASM
+' Target PIC  : 18F4550
+' Hardware    : Non specific
+' Oscillator  : internal 
+' Keywords    : SOMBOR BAZEN NIVOMAT
+' Description : PICBASIC PRO program to control fish tank
+' Author      : Damir Milosavljevic
+' Company     : tecomatic.rs
+'*********************************************************************
+    INCLUDE "DT_INTS-18.bas"     
+    include "ReEnterPBP-18.bas"  
+    DEFINE OSC 4
+    DEFINE I2C_SLOW 1  
+    DEFINE CHAR_PACING 1000
+    ;A = Veliki bazen
+    ;B = Mali bazen 
+    ;C = Spoljni mazen
+    asm
+            __CONFIG    _CONFIG1L, _PLLDIV_1_1L & _CPUDIV_OSC1_PLL2_1L & _USBDIV_1_1L
+            __CONFIG    _CONFIG1H, _FOSC_INTOSC_HS_1H & _FCMEN_OFF_1H & _IESO_OFF_1H
+            __CONFIG    _CONFIG2L, _PWRT_ON_2L & _BOR_OFF_2L & _BORV_3_2L & _VREGEN_OFF_2L
+            __CONFIG    _CONFIG2H, _WDT_OFF_2H & _WDTPS_512_2H
+            __CONFIG    _CONFIG3H, _CCP2MX_OFF_3H & _PBADEN_OFF_3H & _LPT1OSC_OFF_3H & _MCLRE_OFF_3H
+            __CONFIG    _CONFIG4L, _STVREN_OFF_4L & _LVP_OFF_4L & _XINST_OFF_4L   
+            __CONFIG    _CONFIG5L, _CP1_ON_5L & _CP0_ON_5L
+            __CONFIG    _CONFIG5H, _CPB_ON_5H & _CPD_ON_5H          
+    endasm   
+    '///mapiranje ulazno izlaznih pinova, govorimo programu kako cemo u nastavku programa pisati njegov ulazno izlazni pin i da li ga koristimo kao ulaz ili kao izlaz
+    'serijski port
+    rs232Tx         var PORTB.7  
+    rs232Rx         var PORTB.6
+    'i2c komunikacija
+    SDA var PORTD.6 
+    SCL var PORTD.7 
+    'set ulaza za prvi bazen 
+    levelA1         var PORTA.0
+    levelA2         var PORTA.1  
+    levelA3         var PORTA.2  
+    levelA4         var PORTA.3 
+    input levelA1 
+    input levela2 
+    input levelA3 
+    input levelA4 
+    'set ulaza za drugi bazen  
+    levelB1         var PORTA.4
+    levelB2         var PORTA.5  
+    levelB3         var PORTE.0  
+    levelB4         var PORTE.1
+    input levelB1 
+    input levelB2 
+    input levelB3 
+    input levelB4 
+    'set ulaza za treci bazen 
+    levelC1         var PORTE.2
+    levelC2         var PORTC.2   'level 2 spojiti na 4 klemu 
+    levelC3         var PORTC.0  
+    levelC4         var PORTC.1
+    input levelC1 
+    input levelC2 
+    input levelC3 
+    input levelC4   
+    'jedan rezervni ulaz
+    inputZ1         var PORTA.6
+    input inputZ1
+    'set izlaznih pinova za prvi bazen, pumpu i elektromotorni ventil 
+    valveA         var PORTC.6
+    pumpA          var PORTC.7
+   ' valveA         var PORTD.2
+    'pumpA          var PORTD.3
+    output valveA
+    output pumpA
+    'set izlaznih pinova za drugi bazen, pumpu i elektromotorni ventil 
+    valveB         var PORTD.1
+    pumpB          var PORTD.0
+    output valveB
+    output pumpB
+    'set izlaznih pinova za treci bazen, pumpu i elektromotorni ventil 
+    valveC         var PORTD.2
+    pumpC          var PORTD.3
+    output valveC
+    output pumpC
+    'set ulaza za  tastaturu     
+    tService        var PORTB.0
+    tUp             var PORTB.1  
+    tDown           var PORTB.2 
+    tRight          var PORTB.3
+    tOk             var PORTB.4
+    tLeft           var PORTB.5
+    input tLeft      
+    input tOk           
+    input tRight        
+    input tUp           
+    input tDown           
+    input tService       
+    'jedan rezervni izlaz
+    output1         var PORTD.4
+    output output1
+    '///Konstante koje èesto koristimo u programu 
+    majorVer con 1
+    revisionVer con 1
+    tPause con 300
+    Strelica con ">"
+    LCD_Addr CON $4E
+    LCD_Addr2 CON $4E
+    rsMode con 12
+    
+    'inicijalizacija hardwerskog tajmera TMR1
+    ASM
+    INT_LIST  macro    
+         INT_Handler   TMR1_INT,  _Logika,   PBP,  yes
+        endm
+        INT_CREATE               
+    endasm
+    T1CON = $31                      
+    @ INT_ENABLE  TMR1_INT  'Upali tajmer  
+    '///Podešavanje registara unutar mikrokontrolera 
+    ADCON1              = $0F 'iskljuèi komparatore na  portevima
+    CMCON               = $7
+    INTCON2.7           = $0 'ukljuciti interne pull na portb
+    UCON.3              = $0 '
+    UCFG.3              = $1 
+    PORTB               = $00 'postavi sve na portu B na 0
+    PORTC               = $00 'postavi sve na portu B na 0
+    OSCCON              = %01110110 'setovanje osccon registra    
+    '///Definisanje svih promenjivih u RAM memoriji  
+    'niz bajteva     
+    Displej                 var byte[7]'niz 7 bajtova Displej[0],Displej[1]...... 
+    'bajt 0 - 255
+    x                       var byte
+    BrojMenija              var byte
+    Bazen1Ukljucen          var byte
+    Bazen2Ukljucen          var byte
+    Bazen3Ukljucen          var byte   
+    countLevelA1            var byte
+    countLevelA2            var byte 
+    countLevelA3            var byte
+    countLevelA4            var byte
+    countLevelA23           var byte     
+    countLevelB1            var byte  
+    countLevelB2            var byte
+    countLevelB3            var byte
+    countLevelB4            var byte
+    countLevelB23           var byte    
+    countLevelC1            var byte  
+    countLevelC2            var byte
+    countLevelC3            var byte
+    countLevelC4            var byte
+    countLevelC23           var byte
+    'bit 1 ili 0
+    NovoStanjeDesno         var bit
+    NovoStanjeLevo          var bit
+    NovoStanjeGore          var bit                       
+    NovoStanjeDole          var bit
+    NovoStanjeOk            var bit
+    NovoStanjeService       var bit
+    StaroStanjeDesno        var bit       
+    StaroStanjeLevo         var bit      
+    StaroStanjeGore         var bit         
+    StaroStanjeDole         var bit         
+    StaroStanjeOk           var bit           
+    StaroStanjeService      var bit
+    gore                    var bit
+    dole                    var bit
+    levo                    var bit
+    desno                   var bit
+    ok                      var bit
+    Service                 var bit         
+    '///Podešavamo poèetna stanja izlaznih pinova
+    valveA = 0
+    valveb = 0
+    valvec = 0
+    pumpA  = 0
+    pumpB  = 0 
+    pumpC  = 0
+    output1 = 0
+    clear
+    INCLUDE "LCD_PCF8574A.pbp"
+    pause 500	
+'****************************************************************************************** 
+'///prikaz splash displeja  
+Splash:   
+    gosub ReadFromEeprom
+    SEROUT rs232Tx,rsMode,["Nivomat FW:",#majorVer,".",#revisionver,13,10]
+    ARRAYWRITE LCD_Buff, [$FE, $2, "Nivomat init.         "]
+    LCD_WriteBuff
+    ARRAYWRITE LCD_Buff, [$FE, $C0, "FW:",#majorVer,".",#revisionver," # DM 2017"]
+    LCD_WriteBuff
+    pause 1500
+    x = 1
+    pause 30  
+    SEROUT rs232Tx,rsMode,["Nivomat v1, revision 1",13,10]
+    pause 50 
+    SEROUT rs232Tx,rsMode,["Tecomatic.rs Damir Milosavljevic",13,10] 
+    pause 50
+    gosub Main
+'******************************************************************************************
+'///Main u njemu se uvek vrtimo i on je glavni program
+Main: 
+    gosub OcitajTastere
+    ARRAYWRITE LCD_Buff, [$FE,$2,"Nivomat  ","FW:",#majorVer,".",#revisionver]
+    LCD_WriteBuff
+    ARRAYWRITE LCD_Buff, [$FE,$C0,"VB:",#bazen1ukljucen, "MB:",#bazen2ukljucen,"SB:",#bazen3ukljucen,"     "]
+    LCD_WriteBuff   
+    if ok = 1 then 
+        Brojmenija = 1
+        gosub menu
+    endif   
+    if service = 1 then gosub ServiceMode
+    pause 10
+    SEROUT rs232Tx,rsMode,["A: ",#levelA1,#levelA2,#levelA3,#levelA4," B: ",#levelB1,#levelB2,#levelB3,#levelB4," C:",#levelC1,#levelC2,#levelC3,#levelC4,10,"\xFD"]     
+    pause 100
+    SEROUT rs232Tx,rsMode,["[PV] "," A: ",#pumpa,#valvea," B: ",#pumpb,#valveb," C: ",#pumpc,#valvec,10]
+    pause 100 
+goto Main
+'******************************************************************************************   
+Logika: 'labela koja se izvrsava u pozadini na svaki 1sec
+'#############################################################
+'bazen A
+if Bazen1Ukljucen = 1 then 
+        if levelA1 = 0 then 
+            countLevelA1 = countlevelA1 + 1 
+            if countlevela1 = 15 then
+                countlevela1 = 0
+                valvea = 0
+            endif 
+        else
+            countlevela1 = 0 
+        endif         
+        if levelA2 = 1 then 
+            countlevela2 = countlevela2 + 1 
+            if countlevela2 = 15 then 
+                countlevela2 = 0        
+                valvea = 1 
+            endif
+        else
+            countlevela2 = 0   
+        endif
+        
+        if levelA2 = 0 and levelA3 = 0 then 
+            countLevelA23 = countlevelA23 + 1 
+            if countLevelA23 = 15 then 
+                countlevelA23 = 0 
+                pumpa = 1
+            endif  
+        else
+            countlevelA23 = 0 
+        endif 
+            
+        if levelA3 = 1 and levelA2 = 1 then 
+            countLevelA3 = countlevelA3 + 1 
+            if countLevelA3 = 15 then 
+                countLevela3 = 0 
+                pumpa = 0
+            endif 
+        else
+            countLevela3 = 0             
+        endif
+else
+    pumpa = 0
+    valvea = 0
+endif 
+'#############################################################
+'bazen b
+if Bazen2Ukljucen = 1 then 
+        if levelb1 = 0 then 
+            countLevelb1 = countlevelb1 + 1 
+            if countlevelb1 = 15 then
+                countlevelb1 = 0
+                valveb = 0
+            endif 
+        else
+            countlevelb1 = 0 
+        endif        
+        if levelb2 = 1 then 
+            countlevelb2 = countlevelb2 + 1 
+            if countlevelb2 = 15 then 
+                countlevelb2 = 0        
+                valveb = 1 
+            endif
+        else
+            countlevelb2 = 0   
+        endif
+        
+        if levelb2 = 0 and levelb3 = 0 then 
+            countLevelb23 = countlevelb23 + 1 
+            if countLevelb23 = 15 then 
+                countlevelb23 = 0 
+                pumpb = 1
+            endif  
+        else
+            countlevelb23 = 0 
+        endif 
+            
+        if levelb3 = 1 and levelb2 = 1 then 
+            countLevelb3 = countlevelb3 + 1 
+            if countLevelb3 = 15 then 
+                countLevelb3 = 0 
+                pumpb = 0
+            endif 
+        else
+            countLevelb3 = 0             
+        endif
+else
+    pumpb = 0
+    valveb = 0
+endif
+'#############################################################
+'bazen c
+if Bazen3Ukljucen = 1 then 
+        if levelc1 = 0 then 
+            countLevelc1 = countlevelc1 + 1 
+            if countlevelc1 = 15 then
+                countlevelc1 = 0
+                valvec = 0
+            endif 
+        else
+            countlevelc1 = 0 
+        endif         
+        if levelC2 = 1 then 
+            countlevelc2 = countlevelc2 + 1 
+            if countlevelc2 = 15 then 
+                countlevelc2 = 0        
+                valvec = 1 
+            endif
+        else
+            countlevelc2 = 0   
+        endif
+        
+        if levelc2 = 0 and levelc3 = 0 then 
+            countLevelc23 = countlevelc23 + 1 
+            if countLevelc23 = 15 then 
+                countlevelc23 = 0 
+                pumpc = 1
+            endif  
+        else
+            countlevelc23 = 0 
+        endif 
+            
+        if levelc3 = 1 and levelc2 = 1 then 
+            countLevelc3 = countlevelc3 + 1 
+            if countLevelc3 = 15 then 
+                countLevelc3 = 0 
+                pumpc = 0
+            endif 
+        else
+            countLevelc3 = 0             
+        endif
+else
+    pumpc = 0
+    valvec = 0
+endif
+@ INT_RETURN
+ '******************************************************************************************
+Menu: 
+    gosub OcitajTastere
+    if dole = 1 then 
+        if Brojmenija = 3 then 
+            Brojmenija = 3
+        else
+            Brojmenija = Brojmenija + 1      
+        endif
+    endif
+    if gore = 1 then 
+        if Brojmenija = 1 then 
+            Brojmenija = 1
+        else
+            Brojmenija = Brojmenija - 1 
+        endif
+    endif
+    if levo = 1 then
+        Brojmenija = 1
+        goto main 
+    endif
+    if ok = 1 then                
+        if brojMenija = 1 then read 5,x
+        if brojMenija = 2 then read 6,x
+        if brojMenija = 3 then read 7,x
+        gosub MenuAutomatika
+    endif
+    Select case brojmenija
+        case 1   
+            ARRAYWRITE LCD_Buff, [$FE,$2,Strelica,"Veliki bazen       "]
+            LCD_WriteBuff                      
+            ARRAYWRITE LCD_Buff, [$FE,$C0," Mali bazen         "]
+            LCD_WriteBuff
+        case 2    
+            ARRAYWRITE LCD_Buff, [$FE,$2," Veliki bazen       " ]
+            LCD_WriteBuff                      
+            ARRAYWRITE LCD_Buff, [$FE,$C0,Strelica ,"Mali bazen       "]
+            LCD_WriteBuff        
+        case 3  
+            ARRAYWRITE LCD_Buff, [$FE,$2,strelica,"Spoljni bazen       " ]
+            LCD_WriteBuff                      
+            ARRAYWRITE LCD_Buff, [$FE,$C0,"                        "]
+            LCD_WriteBuff                          
+    end select           
+goto Menu 
+'******************************************************************************************
+MenuAutomatika:
+    gosub OcitajTastere
+    if levo = 1 then goto menu
+    if gore = 1 then x = 1 
+    if dole = 1 then x = 0  
+    ARRAYWRITE LCD_Buff, [$FE,$2,"Automatika       " ]
+    LCD_WriteBuff
+    select case x
+    case 0       
+        ARRAYWRITE LCD_Buff, [$FE,$C0,"[OK] - Ugasena "]
+        LCD_WriteBuff
+    case 1
+        ARRAYWRITE LCD_Buff, [$FE,$C0,"[OK] - Upaljena "]
+        LCD_WriteBuff
+    end select 
+    if ok = 1 then 
+        if brojmenija = 1 then write 5,x 
+        if brojmenija = 2 then write 6,x 
+        if brojmenija = 3 then write 7,x 
+        gosub ReadFromEeprom
+        gosub Sacuvano            
+    endif   
+goto MenuAutomatika
+'******************************************************************************************
+ServiceMode:
+    gosub OcitajTastere
+    if dole = 1 then 
+        if Brojmenija = 4 then 
+            Brojmenija = 4
+        else
+            Brojmenija = Brojmenija + 1      
+        endif
+    endif
+    if gore = 1 then 
+        if Brojmenija = 1 then 
+            Brojmenija = 1
+        else
+            Brojmenija = Brojmenija - 1 
+        endif
+    endif
+    if levo = 1 then
+        Brojmenija = 1
+        goto main 
+    endif
+    Select case brojmenija
+    case 1   
+        ARRAYWRITE LCD_Buff, [$FE,$2,Strelica,"Veliki bazen       "]
+        LCD_WriteBuff                      
+        ARRAYWRITE LCD_Buff, [$FE,$C0," Mali bazen         "]
+        LCD_WriteBuff
+    case 2    
+        ARRAYWRITE LCD_Buff, [$FE,$2," Veliki bazen       " ]
+        LCD_WriteBuff                      
+        ARRAYWRITE LCD_Buff, [$FE,$C0,Strelica ,"Mali bazen       "]
+        LCD_WriteBuff        
+    case 3  
+        ARRAYWRITE LCD_Buff, [$FE,$2,strelica,"Spoljni bazen       " ]
+        LCD_WriteBuff                      
+        ARRAYWRITE LCD_Buff, [$FE,$C0," Svi bazeni                       "]
+        LCD_WriteBuff     
+    case 4  
+        ARRAYWRITE LCD_Buff, [$FE,$2," Spoljni bazen       " ]
+        LCD_WriteBuff                      
+        ARRAYWRITE LCD_Buff, [$FE,$C0,strelica,"Svi bazeni                       "]
+        LCD_WriteBuff                        
+    end select  
+    if ok = 1 then gosub servicemodeprikaz
+    if levo = 1 then goto main
+goto serviceMode
+'******************************************************************************************
+ServiceModePrikaz:
+    gosub OcitajTastere
+    select case brojmenija   
+    case 1
+        ARRAYWRITE LCD_Buff,[$FE,$2,"VB# ","1:",#levelA1,"2:",#levelA2,"3:",#levelA3,"4:",#levelA4,"                   "]
+        LCD_WriteBuff 
+        ARRAYWRITE LCD_Buff,[$FE, $C0, "Pumpa:",#pumpa,"Ventil:",#valvea, " "]          
+        LCD_WriteBuff  
+    case 2
+        ARRAYWRITE LCD_Buff,[$FE,$2,"MB# ","1:",#levelb1,"2:",#levelb2,"3:",#levelb3,"4:",#levelb4,"                   "]
+        LCD_WriteBuff 
+        ARRAYWRITE LCD_Buff,[$FE, $C0, "Pumpa:",#pumpb,"Ventil:",#valveb, " "]          
+        LCD_WriteBuff 
+    case 3
+        ARRAYWRITE LCD_Buff,[$FE,$2,"SB# ","1:",#levelc1,"2:",#levelc2,"3:",#levelc3,"4:",#levelc4,"                   "]
+        LCD_WriteBuff 
+        ARRAYWRITE LCD_Buff,[$FE, $C0, "Pumpa:",#pumpc,"Ventil:",#valvec, " "]          
+        LCD_WriteBuff   
+    case 4
+        ARRAYWRITE LCD_Buff,[$FE,$2,"A",#levelA1,#levelA2,#levelA3,#levelA4,"B",#levelB1,#levelB2,#levelB3,#levelB4,"C",#levelC1,#levelC2,#levelC3,#levelC4,"   "]
+        LCD_WriteBuff 
+        ARRAYWRITE LCD_Buff, [$FE, $C0, "[PV] ","A",#pumpa,#valvea,"B",#pumpb,#valveb,"C",#pumpc,#valvec, "          "]          
+        LCD_WriteBuff  
+   end select
+   if levo = 1 then return
+goto ServiceModePrikaz
+'******************************************************************************************
+Sacuvano: 'podprogram za ispisivanje na ekranu da su izmene sacuvane 
+    gosub ReadFromEeprom 'posto je menjana vrednost u nekom od menija, prebacujemo 'sveze' podatke iz eproma u ram memoriju 
+    ARRAYWRITE LCD_Buff, [$FE,$2,"Sacuvane izmene!" ]
+    LCD_WriteBuff                      
+    ARRAYWRITE LCD_Buff, [$FE,$C0,"                        "]
+    LCD_WriteBuff 
+    pause 1000
+return 
+'******************************************************************************************
+ReadFromEeprom:'podprogram za prebacivanje vrednosti iz eeprom memorije u flash(ram) memoriju  
+    read 5,Bazen1Ukljucen 'procitaj iz eproma i ubaci u promenjivu, ovo radimo da ne citamo stalno epprom vec drzimo vrednost u promenjivoj 
+    if Bazen1Ukljucen = 255 then write 5,0  'ukoliko se epprom lokacija nije jos setovana upisace 0 u nju
+    read 6,Bazen2Ukljucen 
+    if Bazen2Ukljucen = 255 then write 6,0 
+    read 7,Bazen3Ukljucen 
+    if Bazen3Ukljucen = 255 then write 7,0 
+return 
+'******************************************************************************************
+OcitajTastere:  'podprogram za proveru da li je taster pritisnut i koji je pritisnut 
+    NovoStanjeDesno         =  tRight
+    NovoStanjeLevo          =  tLeft
+    NovoStanjeGore          =  tUp
+    NovoStanjeDole          =  tDown
+    NovoStanjeOk            =  tOk
+    NovoStanjeService       =  tservice
+    if novostanjegore < starostanjegore then 
+        gore = 1 
+    else
+        gore = 0 
+    ENDIF   
+    if novostanjedole < starostanjedole then 
+        dole = 1
+    else 
+        dole = 0
+    ENDIF    
+    if novostanjelevo < starostanjelevo then 
+        levo = 1
+    else
+        levo = 0
+    ENDIF    
+    if novostanjedesno < starostanjedesno then 
+        desno = 1
+    else
+        desno = 0
+    ENDIF    
+    if novostanjeOK < starostanjeok then 
+        ok = 1
+    else
+        ok = 0
+    ENDIF    
+    if novostanjeService < starostanjeService then 
+        Service = 1
+    else
+        Service = 0
+    ENDIF    
+    StaroStanjeDesno        = NovoStanjeDesno        
+    StaroStanjeLevo         = NovoStanjeLevo      
+    StaroStanjeGore         = NovoStanjeGore          
+    StaroStanjeDole         = NovoStanjeDole         
+    StaroStanjeOk           = NovoStanjeOk           
+    StaroStanjeService      = NovoStanjeService  
+return
+'******************************************************************************************
+end 'kraj :) 
+
