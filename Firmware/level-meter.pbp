@@ -8,7 +8,8 @@
 ' Keywords    : SOMBOR BAZEN NIVOMAT
 ' Description : PICBASIC PRO program to control fish tank
 ' Author      : Damir Milosavljevic
-' Company     : tecomatic.rs
+' Company     : tecomatic.net
+' Date        : 15.11.2017
 '*********************************************************************
     INCLUDE "DT_INTS-18.bas"     
     include "ReEnterPBP-18.bas"  
@@ -98,7 +99,7 @@
     'jedan rezervni izlaz
     output1         var PORTD.4
     output output1
-    '///Konstante koje Ëesto koristimo u programu 
+    '///Konstante koje √®esto koristimo u programu 
     majorVer con 1
     revisionVer con 1
     tPause con 300
@@ -116,8 +117,8 @@
     endasm
     T1CON = $31                      
     @ INT_ENABLE  TMR1_INT  'Upali tajmer  
-    '///Podeöavanje registara unutar mikrokontrolera 
-    ADCON1              = $0F 'iskljuËi komparatore na  portevima
+    '///Pode≈°avanje registara unutar mikrokontrolera 
+    ADCON1              = $0F 'isklju√®i komparatore na  portevima
     CMCON               = $7
     INTCON2.7           = $0 'ukljuciti interne pull na portb
     UCON.3              = $0 '
@@ -168,7 +169,7 @@
     desno                   var bit
     ok                      var bit
     Service                 var bit         
-    '///Podeöavamo poËetna stanja izlaznih pinova
+    '///Pode≈°avamo po√®etna stanja izlaznih pinova
     valveA = 0
     valveb = 0
     valvec = 0
@@ -193,7 +194,7 @@ Splash:
     pause 30  
     SEROUT rs232Tx,rsMode,["Nivomat v1, revision 1",13,10]
     pause 50 
-    SEROUT rs232Tx,rsMode,["Tecomatic.rs Damir Milosavljevic",13,10] 
+    SEROUT rs232Tx,rsMode,["Tecomatic.net",13,10] 
     pause 50
     gosub Main
 '******************************************************************************************
