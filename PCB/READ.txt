@@ -1,0 +1,4 @@
+Design with: 
+Sprint Layout 5.0 - PCB
+sPlan 6.0 - Schematic
+
