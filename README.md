@@ -1,9 +1,9 @@
-# Level Meter — PIC18F4550 Embedded Controller
+# Level Meter - PIC18F4550 Embedded Controller
 
 A water level monitoring and pump control system built on the PIC18F4550 microcontroller.  
-Designed and deployed for public swimming pool management at a sports center — running flawlessly for **5+ years without a single failure**.
+Designed and deployed for public swimming pool management at a sports center - running flawlessly for **5+ years without a single failure**.
 
-> Built entirely from scratch — firmware, PCB design, and probe hardware.
+> Built entirely from scratch - firmware, PCB design, and probe hardware.
 
 ---
 
@@ -13,9 +13,9 @@ The system monitors water levels in compensation tanks and automatically control
 
 | Pool | Type |
 |---|---|
-| A — Veliki bazen | Olympic indoor pool |
-| B — Mali bazen | Olympic outdoor pool |
-| C — Spoljni bazen | Auxiliary pool |
+| A - Veliki bazen | Olympic indoor pool |
+| B - Mali bazen | Olympic outdoor pool |
+| C - Spoljni bazen | Auxiliary pool |
 
 ---
 
@@ -34,7 +34,7 @@ The system monitors water levels in compensation tanks and automatically control
 
 ## I/O Mapping
 
-### Inputs — Level sensors (12 total, 4 per tank)
+### Inputs - Level sensors (12 total, 4 per tank)
 
 | Pin | Signal | Description |
 |---|---|---|
@@ -43,16 +43,16 @@ The system monitors water levels in compensation tanks and automatically control
 | PORTE.2, PORTC.0–2 | levelC1–C4 | Tank C level probes |
 | PORTB.0–5 | tService, tUp, tDown, tRight, tOk, tLeft | Navigation buttons |
 
-### Outputs — Relays (6 total, 2 per tank)
+### Outputs - Relays (6 total, 2 per tank)
 
 | Pin | Signal | Description |
 |---|---|---|
-| PORTC.6 | valveA | Solenoid valve — Tank A |
-| PORTC.7 | pumpA | Pump relay — Tank A |
-| PORTD.1 | valveB | Solenoid valve — Tank B |
-| PORTD.0 | pumpB | Pump relay — Tank B |
-| PORTD.2 | valveC | Solenoid valve — Tank C |
-| PORTD.3 | pumpC | Pump relay — Tank C |
+| PORTC.6 | valveA | Solenoid valve - Tank A |
+| PORTC.7 | pumpA | Pump relay - Tank A |
+| PORTD.1 | valveB | Solenoid valve - Tank B |
+| PORTD.0 | pumpB | Pump relay - Tank B |
+| PORTD.2 | valveC | Solenoid valve - Tank C |
+| PORTD.3 | pumpC | Pump relay - Tank C |
 
 ---
 
@@ -62,10 +62,10 @@ The core logic runs as a **hardware timer interrupt (TMR1) every ~1 second** in 
 
 ```
 Level probes (bottom to top):
-  L1 — Alarm / minimum level (pump protection)
-  L2 — High level  → open valve (discharge water back to pool)
-  L3 — Low level   → start pump (fill tank from pool)
-  L4 — Reserved / alarm
+  L1 - Alarm / minimum level (pump protection)
+  L2 - High level  → open valve (discharge water back to pool)
+  L3 - Low level   → start pump (fill tank from pool)
+  L4 - Reserved / alarm
 ```
 
 ### Per-tank logic (same for A, B and C):
@@ -89,7 +89,7 @@ All state changes require a signal to be stable for **15 consecutive timer ticks
 
 ## Water Level Probes
 
-The probes work by passing a small **AC current (~100–200 mA)** through the water via **brass electrodes**.
+The probes work by passing a small **AC current (~30–50 mA)** through the water via **brass electrodes**.
 
 When the circuit closes through the water:
 1. Signal passes through a **bridge rectifier**
@@ -98,7 +98,7 @@ When the circuit closes through the water:
 
 **Why AC and optocouplers?**
 - AC current ensures the electrodes wear **evenly** on both sides
-- Low current (~100–200 mA) prevents **electrode corrosion**
+- Low current (~30–50 mA) prevents **electrode corrosion**
 - Optocouplers provide **full galvanic isolation** between the water circuit and the microcontroller, protecting against surges and noise
 
 ---
@@ -108,14 +108,14 @@ When the circuit closes through the water:
 | Subroutine | Description |
 |---|---|
 | `Splash` | Startup screen, firmware version display, EEPROM init |
-| `Main` | Main loop — refreshes LCD status, polls buttons, handles serial debug output |
-| `Logika` | TMR1 interrupt handler — runs all pump/valve control logic every ~1 sec |
-| `Menu` | Navigation menu — enable/disable each pool's automation |
-| `MenuAutomatika` | Submenu — toggle automation ON/OFF per pool, saves to EEPROM |
-| `ServiceMode` | Service menu — manual inspection of all probe and relay states |
+| `Main` | Main loop - refreshes LCD status, polls buttons, handles serial debug output |
+| `Logika` | TMR1 interrupt handler - runs all pump/valve control logic every ~1 sec |
+| `Menu` | Navigation menu - enable/disable each pool's automation |
+| `MenuAutomatika` | Submenu - toggle automation ON/OFF per pool, saves to EEPROM |
+| `ServiceMode` | Service menu - manual inspection of all probe and relay states |
 | `ServiceModePrikaz` | Live display of probe levels and relay states per pool |
 | `ReadFromEeprom` | Load pool on/off settings from EEPROM into RAM on startup |
-| `OcitajTastere` | Button edge detection — fires only on falling edge (press), not hold |
+| `OcitajTastere` | Button edge detection - fires only on falling edge (press), not hold |
 | `Sacuvano` | "Settings saved" confirmation screen |
 
 ### EEPROM layout
@@ -144,11 +144,11 @@ Where each digit represents a probe or relay state (1 = active, 0 = inactive).
 ## Notes
 
 - Each pool can be independently enabled or disabled from the menu without affecting the others.
-- Button input uses **falling-edge detection** — holding a button does not repeat, preventing accidental changes.
+- Button input uses **falling-edge detection** - holding a button does not repeat, preventing accidental changes.
 - The firmware is written in **PicBasic Pro 3.0** using interrupt-driven architecture (DT_INTS-18 library) to keep the control logic fully decoupled from the UI.
 
 ---
 
 ## License
 
-Free to use for learning or any other purpose.
+MIT
